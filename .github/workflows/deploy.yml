@@ -8,23 +8,19 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        node-version: [20]
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Install pnpm
+      - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
-      - name: Use Node.js ${{ matrix.node-version }}
+      - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
-          cache: "pnpm"
+          node-version: 20
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -32,32 +28,8 @@ jobs:
       - name: Build docs
         run: pnpm docs:build
 
-      - name: Deploy to server
-        if: ${{ secrets.SSH_HOST != '' }}
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          WORK_DIR: ${{ secrets.WORK_DIR }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-        run: |
-          mkdir -p ~/.ssh
-          install -m 600 -D /dev/null ~/.ssh/id_rsa
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
-          echo "SSH key installed and host scanned"
-          rsync -ravh --update --delete docs/.vitepress/dist/ "$SSH_USER@$SSH_HOST:$WORK_DIR"
-          rm -f ~/.ssh/id_rsa
-
-      - name: Purge Cloudflare Cache
-        env:
-          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
-          CF_ACCOUNT_MAIL: ${{ secrets.CF_ACCOUNT_MAIL }}
-          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-        run: |
-          curl --request POST \
-               --url https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache \
-               --header 'Content-Type: application/json' \
-               --header "X-Auth-Email: ${CF_ACCOUNT_MAIL}" \
-               --header "Authorization: Bearer ${CF_API_TOKEN}" \
-               --data '{"purge_everything":true}'
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/.vitepress/dist
