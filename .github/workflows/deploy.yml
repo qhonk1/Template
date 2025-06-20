@@ -29,29 +29,24 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # - name: Cache Vitepress
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: docs/.vitepress/cache
-      #     key:
-      #       ${{ runner.os }}-vitepress-${{ hashFiles('docs/.vitepress/cache/**','pnpm-lock.yaml') }}
-      #     restore-keys: ${{ runner.os }}-vitepress-
-
       - name: Build docs
         run: pnpm docs:build
 
       - name: Deploy to server
+        if: ${{ secrets.SSH_HOST != '' }}
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
           WORK_DIR: ${{ secrets.WORK_DIR }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
+          mkdir -p ~/.ssh
           install -m 600 -D /dev/null ~/.ssh/id_rsa
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          ssh-keyscan -H $SSH_HOST >> ~/.ssh/known_hosts
-          echo "Installed SSH key"
-          rsync -ravh --update --delete docs/.vitepress/dist/* $SSH_USER@$SSH_HOST:/home/wotaku/htdocs/wotaku.moe/
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          echo "SSH key installed and host scanned"
+          rsync -ravh --update --delete docs/.vitepress/dist/ "$SSH_USER@$SSH_HOST:$WORK_DIR"
           rm -f ~/.ssh/id_rsa
 
       - name: Purge Cloudflare Cache
@@ -61,8 +56,8 @@ jobs:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         run: |
           curl --request POST \
-                --url https://api.cloudflare.com/client/v4/zones/${{ secrets.cf_zone_id }}/purge_cache \
-                --header 'Content-Type: application/json' \
-                --header 'X-Auth-Email: ${{ secrets.cf_account_mail }}' \
-                --header 'Authorization: Bearer ${{ secrets.cf_api_token }}' \
-                --data '{"purge_everything": true}'
+               --url https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache \
+               --header 'Content-Type: application/json' \
+               --header "X-Auth-Email: ${CF_ACCOUNT_MAIL}" \
+               --header "Authorization: Bearer ${CF_API_TOKEN}" \
+               --data '{"purge_everything":true}'
